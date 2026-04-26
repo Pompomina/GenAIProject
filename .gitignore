@@ -1,0 +1,10 @@
+data/
+checkpoints/
+results/rollouts/
+vendor/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.npz
+*.pt
+*.pkl
