@@ -24,9 +24,17 @@ class MLPWorldModel(nn.Module):
         return self.net(x)
 
 
+def _best_device(requested: str = "cuda") -> torch.device:
+    if requested == "cuda" and torch.cuda.is_available():
+        return torch.device("cuda")
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 class MLPBaseline:
     def __init__(self, hidden_dim: int = 256, n_layers: int = 3, lr: float = 1e-3, device: str = "cuda"):
-        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        self.device = _best_device(device)
         self.model = MLPWorldModel(hidden_dim=hidden_dim, n_layers=n_layers).to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.loss_fn = nn.MSELoss()

@@ -21,7 +21,7 @@ echo "Overlay ready at $OVERLAY_TORCH"
 
 # Install everything inside the overlay
 echo "Installing env_torch (this takes ~20 min)..."
-singularity exec --nv --fakeroot \
+singularity exec --fakeroot \
     --overlay "$OVERLAY_TORCH" \
     "$SINGULARITY_SIF" \
     /bin/bash -c "

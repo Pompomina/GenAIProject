@@ -19,7 +19,7 @@ gunzip "$OVERLAY_JAX.gz"
 echo "Overlay ready at $OVERLAY_JAX"
 
 echo "Installing env_jax (this takes ~10 min)..."
-singularity exec --nv --fakeroot \
+singularity exec --fakeroot \
     --overlay "$OVERLAY_JAX" \
     "$SINGULARITY_SIF" \
     /bin/bash -c "

@@ -15,8 +15,13 @@ Outputs:
 """
 import os
 import sys
+import time
+import logging
+from datetime import datetime
+
 import yaml
 import numpy as np
+from tqdm import tqdm
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src import visualize
@@ -25,52 +30,61 @@ CFG_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "experiment.
 ROLLOUT_DIR = "results/rollouts"
 OUT_DIR = "results/exp2"
 
-VIS_K = [0, 9, 49]  # 0-indexed: k=1, 10, 50
-N_SAMPLE_TRAJ = 5   # number of representative trajectories to visualize
+VIS_K = [0, 9, 49]   # 0-indexed: k=1, 10, 50
+N_SAMPLE_TRAJ = 5    # representative trajectories to visualize
+
+os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs("results/logs", exist_ok=True)
+
+_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(f"results/logs/exp2_{_ts}.log"),
+    ],
+)
+log = logging.getLogger(__name__)
 
 
 def main():
+    t0 = time.time()
     with open(CFG_PATH) as f:
         cfg = yaml.safe_load(f)
 
     games = cfg["games"]
     model_cfgs = cfg["models"]
-    os.makedirs(OUT_DIR, exist_ok=True)
 
-    for game in games:
+    for game in tqdm(games, desc="Exp2 games", unit="game", ncols=80):
         frames_by_model: dict[str, np.ndarray] = {}
         true_frames_by_model: dict[str, np.ndarray] = {}
 
-        for model_name in model_cfgs:
+        for model_name in tqdm(model_cfgs, desc=f"  {game} models", leave=False, ncols=80):
             cache_path = os.path.join(ROLLOUT_DIR, f"{model_name}_{game}.npz")
             if not os.path.exists(cache_path):
-                print(f"[exp2] WARNING: rollout cache missing for {model_name}/{game}")
+                log.warning("rollout cache missing for %s/%s", model_name, game)
                 continue
 
             data = np.load(cache_path)
-            pred_frames = data["pred_frames"]   # [n_traj, K, ...]
+            pred_frames = data["pred_frames"]
             true_frames = data["true_frames"]
 
-            # Pick N_SAMPLE_TRAJ evenly spaced trajectories
-            idxs = np.linspace(0, len(pred_frames) - 1, N_SAMPLE_TRAJ, dtype=int)
+            space = model_cfgs[model_name]["space"]
+            if space != "pixel":
+                log.info("  [exp2] %s is RAM-space — skipping frame grid", model_name)
+                continue
 
-            for i, traj_idx in enumerate(idxs):
-                traj_pred = pred_frames[traj_idx]   # [K, ...]
-                traj_true = true_frames[traj_idx]
-
-                # For pixel models, show frames; for MLP (RAM), skip frame grid
-                space = model_cfgs[model_name]["space"]
-                if space != "pixel":
-                    continue
-
-                frames_by_model[model_name] = traj_pred
-                true_frames_by_model[model_name] = traj_true
+            # Pick a representative trajectory (middle index)
+            traj_idx = len(pred_frames) // 2
+            frames_by_model[model_name] = pred_frames[traj_idx]
+            true_frames_by_model[model_name] = true_frames[traj_idx]
+            log.info("  [exp2] loaded %s/%s  traj_idx=%d", model_name, game, traj_idx)
 
         if not frames_by_model:
-            print(f"[exp2] No pixel-space rollout caches found for {game}. Skipping.")
+            log.warning("[exp2] No pixel-space rollout caches for %s. Skipping.", game)
             continue
 
-        # Combined comparison: all pixel models side-by-side with ground truth
         visualize.plot_frame_grid(
             frames_by_model=frames_by_model,
             ks=VIS_K,
@@ -79,7 +93,6 @@ def main():
             save_path=os.path.join(OUT_DIR, f"comparison_{game}.png"),
         )
 
-        # Per-model strip (no ground truth, just the model's output)
         for model_name, traj_frames in frames_by_model.items():
             visualize.plot_frame_grid(
                 frames_by_model={model_name: traj_frames},
@@ -87,6 +100,9 @@ def main():
                 game=game,
                 save_path=os.path.join(OUT_DIR, f"frames_{model_name}_{game}.png"),
             )
+
+    elapsed = (time.time() - t0) / 60.0
+    log.info("Exp 2 completed in %.1f min", elapsed)
 
 
 if __name__ == "__main__":
